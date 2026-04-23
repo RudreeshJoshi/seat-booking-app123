@@ -1,0 +1,38 @@
+# Node modules
+node_modules
+npm-debug.log
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Cache
+.npm
+.cache
+
+# Coverage reports
+coverage
+.nyc_output
+
+# Temporary files
+tmp
+temp
