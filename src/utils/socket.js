@@ -17,7 +17,13 @@ class SocketManager {
   }
 
   // Connect to the Socket.IO server
-  connect(serverUrl = 'http://localhost:3000') {
+  connect(serverUrl = null) {
+    // Auto-detect server URL if not provided
+    if (!serverUrl) {
+      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+      const host = window.location.host;
+      serverUrl = `${protocol}//${host}`;
+    }
     if (this.socket && this.connected) {
       console.log('Socket already connected');
       return Promise.resolve(this.socket);

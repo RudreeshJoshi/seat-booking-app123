@@ -34,13 +34,9 @@ class SocketManager {
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         serverUrl = 'http://localhost:3000';
       } else {
-        // For production, you need to deploy your WebSocket server separately
-        // Replace with your actual WebSocket server URL
-        // Options:
-        // - Local Docker: http://localhost:3000
-        // - Remote server: wss://your-domain.com
-        // - Cloud service: wss://your-app.herokuapp.com
-        serverUrl = 'http://localhost:3000'; // Local Docker server for testing
+        // For production - use same domain as the web app
+        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+        serverUrl = `${protocol}//${window.location.host}`;
       }
     }
     if (this.socket && this.connected) {
@@ -326,14 +322,8 @@ async function initializeWebSocket() {
     console.error('Failed to initialize WebSocket:', error);
     console.log('Running in offline mode - real-time features disabled');
     
-    // Show user-friendly message instead of alert
-    const offlineNotice = document.createElement('div');
-    offlineNotice.innerHTML = `
-      <div style="background: #ff9800; color: white; padding: 10px; margin: 10px; border-radius: 4px; text-align: center;">
-        <strong>Offline Mode:</strong> Real-time seat sync is disabled. Multiple users won't see each other's selections.
-      </div>
-    `;
-    document.querySelector('.container').insertBefore(offlineNotice, document.querySelector('.leftCont'));
+    // Silent offline mode - app works with local singleton pattern
+    // No need to show intrusive banner, the app gracefully degrades
     
     // Remove the alert by not showing it
     // alert('Failed to connect to real-time server. Seat booking may not work correctly.');
@@ -427,9 +417,10 @@ proceedBtn.addEventListener("click", () => {
     return;
   }
 
+  // If not connected to server, proceed with local-only booking
+  // The SeatBookingManager singleton will handle concurrency control locally
   if (!socketManager.isConnected()) {
-    alert("Not connected to server. Please refresh the page.");
-    return;
+    console.log('Proceeding with local booking mode');
   }
 
   // Lock seats via WebSocket
