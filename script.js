@@ -183,12 +183,37 @@ class SeatBookingManager {
     this.lockedSeats = new Set(); // Track seats locked by other users
     this.myLockedSeats = new Set(); // Track seats locked by current user
     this.checkoutTimers = new Map(); // Track checkout timers
+    this.bookingStage = 'selecting'; // 'selecting' or 'confirming'
+    this.pendingSeats = []; // Seats waiting to be confirmed
     
     SeatBookingManager.instance = this;
   }
 
   setCurrentShow(showId) {
     this.currentShowId = showId;
+  }
+
+  // Complete booking - turn blue seats to occupied
+  completeBooking() {
+    this.pendingSeats.forEach(seatId => {
+      const seatElement = this.getSeatElement(seatId);
+      if (seatElement) {
+        seatElement.classList.remove("booking");
+        seatElement.classList.add("occupied");
+        seatElement.title = "Booked";
+      }
+      this.myLockedSeats.delete(seatId);
+      
+      // Clear any timers
+      if (this.checkoutTimers.has(seatId)) {
+        clearTimeout(this.checkoutTimers.get(seatId));
+        this.checkoutTimers.delete(seatId);
+      }
+    });
+    
+    this.pendingSeats = [];
+    this.bookingStage = 'selecting';
+    return true;
   }
 
   // Check if seat is available for selection
@@ -285,12 +310,16 @@ class SeatBookingManager {
         // Local-only mode: just add to myLockedSeats and change UI
         this.myLockedSeats.add(seatId);
         seatElement.classList.add("booking");
-        seatElement.title = "Your seat (booking in progress)";
+        seatElement.title = "Your seat (click Confirm to complete)";
         lockedSeats.push(seatId);
         console.log(`Seat ${seatId} locked locally (offline mode)`);
       }
     });
 
+    // Save to pending seats and change stage
+    this.pendingSeats = [...lockedSeats];
+    this.bookingStage = 'confirming';
+    
     return lockedSeats;
   }
 }
@@ -423,48 +452,85 @@ allSeats.forEach((seat) => {
 
 // Handle Proceed Button
 proceedBtn.addEventListener("click", () => {
-  if (bookingManager.selectedSeats.length === 0) {
-    alert("Oops! No seat selected.");
-    return;
-  }
-
-  // Get the total price before resetting
-  const totalPrice = bookingManager.selectedSeats.length * bookingManager.currentMoviePrice;
-
-  // Lock seats (works in both online and offline mode)
-  const lockedSeats = bookingManager.lockSelectedSeats();
-  
-  if (lockedSeats.length > 0) {
-    // Remove selection UI and add booking state
-    bookingManager.selectedSeats.forEach((seat) => {
-      seat.classList.remove("selected");
-    });
-
-    // Start checkout timers for our locked seats (if connected)
-    if (socketManager.isConnected()) {
-      lockedSeats.forEach(seatId => {
-        bookingManager.startCheckoutTimer(seatId);
-      });
-      alert(`${lockedSeats.length} seat(s) locked! You have 5 minutes to complete the booking. Total: $${totalPrice}`);
-    } else {
-      // Offline mode: Show booking confirmation with total
-      alert(`Booking confirmed for ${lockedSeats.length} seat(s)! Total: $${totalPrice}\n\nIn a real app, you would proceed to payment.`);
+  // Stage 1: Selecting seats - lock them (turn blue)
+  if (bookingManager.bookingStage === 'selecting') {
+    if (bookingManager.selectedSeats.length === 0) {
+      alert("Oops! No seat selected.");
+      return;
     }
+
+    // Get the total price
+    const totalPrice = bookingManager.selectedSeats.length * bookingManager.currentMoviePrice;
+
+    // Lock seats (works in both online and offline mode)
+    const lockedSeats = bookingManager.lockSelectedSeats();
     
-    console.log('Seats locked, booking confirmed');
-  } else {
-    alert("Failed to lock seats. Please try again.");
+    if (lockedSeats.length > 0) {
+      // Remove selection UI and add booking state (blue)
+      bookingManager.selectedSeats.forEach((seat) => {
+        seat.classList.remove("selected");
+      });
+
+      // Clear selected seats from manager
+      bookingManager.selectedSeats = [];
+      updateDisplay();
+
+      // Change button to "Confirm Booking"
+      proceedBtn.textContent = "Confirm Booking";
+      proceedBtn.style.backgroundColor = "#ff9800"; // Orange color for confirm
+      
+      alert(`${lockedSeats.length} seat(s) reserved! Total: $${totalPrice}\n\nClick "Confirm Booking" to complete your reservation.`);
+      
+      console.log('Seats locked, waiting for confirmation');
+    } else {
+      alert("Failed to lock seats. Please try again.");
+    }
   }
-  
-  resetSelection();
+  // Stage 2: Confirming booking - complete it (turn grey)
+  else if (bookingManager.bookingStage === 'confirming') {
+    const seatCount = bookingManager.pendingSeats.length;
+    const totalPrice = seatCount * bookingManager.currentMoviePrice;
+    
+    // Complete the booking
+    bookingManager.completeBooking();
+    
+    // Reset button
+    proceedBtn.textContent = "Continue";
+    proceedBtn.style.backgroundColor = ""; // Reset to default
+    
+    alert(`🎉 Booking Successful!\n\n${seatCount} seat(s) booked.\nTotal paid: $${totalPrice}\n\nEnjoy your movie!`);
+    
+    console.log('Booking completed successfully');
+  }
 });
 
 // Handle Cancel Button
 cancelBtn.addEventListener("click", () => {
-  bookingManager.selectedSeats.forEach((seat) => {
-    seat.classList.remove("selected");
-  });
-  resetSelection();
+  // If in confirming stage, release the locked seats
+  if (bookingManager.bookingStage === 'confirming') {
+    bookingManager.pendingSeats.forEach(seatId => {
+      const seatElement = bookingManager.getSeatElement(seatId);
+      if (seatElement) {
+        seatElement.classList.remove("booking");
+        seatElement.title = "";
+      }
+      bookingManager.myLockedSeats.delete(seatId);
+    });
+    bookingManager.pendingSeats = [];
+    bookingManager.bookingStage = 'selecting';
+    
+    // Reset button
+    proceedBtn.textContent = "Continue";
+    proceedBtn.style.backgroundColor = "";
+    
+    alert("Booking cancelled. Your seats have been released.");
+  } else {
+    // Normal cancel during selection
+    bookingManager.selectedSeats.forEach((seat) => {
+      seat.classList.remove("selected");
+    });
+    resetSelection();
+  }
 });
 
 // Add manual unlock button for testing (optional)
