@@ -100,11 +100,19 @@ io.on('connection', (socket) => {
 
     console.log(`Seat ${seatId} locked for user ${userId} in show ${showId}`);
     
-    // Notify all clients in the room
+    // Notify all clients in the room (including sender for confirmation)
     io.to(`show-${showId}`).emit('seat-locked', {
       seatId,
       userId,
       lockTime: lockInfo.lockTime
+    });
+    
+    // Also broadcast to all connected clients as backup
+    socket.broadcast.emit('seat-locked', {
+      seatId,
+      userId,
+      lockTime: lockInfo.lockTime,
+      showId
     });
   });
 
@@ -112,6 +120,22 @@ io.on('connection', (socket) => {
   socket.on('unlock-seat', (data) => {
     const { showId, seatId, userId } = data;
     unlockSeat(showId, seatId, userId, false);
+  });
+
+  // Handle polling request for seat status
+  socket.on('request-seat-status', (data) => {
+    const { showId } = data;
+    
+    // Send current locked seats to requesting client
+    const showLocks = seatLocks.get(showId);
+    if (showLocks && showLocks.size > 0) {
+      const lockedSeats = Array.from(showLocks.entries()).map(([seatId, lockInfo]) => ({
+        seatId,
+        userId: lockInfo.userId,
+        lockTime: lockInfo.lockTime
+      }));
+      socket.emit('locked-seat-initial', lockedSeats);
+    }
   });
 
   // Handle user disconnect
@@ -163,6 +187,14 @@ function unlockSeat(showId, seatId, userId, isAuto) {
       seatId,
       userId,
       isAuto
+    });
+    
+    // Also broadcast to all connected clients as backup
+    io.emit('seat-unlocked', {
+      seatId,
+      userId,
+      isAuto,
+      showId
     });
   }
 }

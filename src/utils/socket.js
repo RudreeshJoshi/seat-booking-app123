@@ -143,6 +143,39 @@ class SocketManager {
       console.log('Seat lock failed:', data);
       this.emit('seat-locked-failed', data);
     });
+
+    // Start polling for updates (fallback for unreliable WebSockets)
+    this.startPolling();
+  }
+
+  // Polling mechanism for reliable updates
+  startPolling() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+    }
+
+    // Poll every 3 seconds for seat status updates
+    this.pollingInterval = setInterval(() => {
+      if (this.currentShowId) {
+        this.pollForUpdates();
+      }
+    }, 3000);
+
+    console.log('Started polling for seat updates');
+  }
+
+  pollForUpdates() {
+    // Emit a request to get current seat status
+    if (this.socket && this.connected) {
+      this.socket.emit('request-seat-status', { showId: this.currentShowId });
+    }
+  }
+
+  stopPolling() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
   }
 
   // Custom event emitter for local listeners
