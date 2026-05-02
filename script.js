@@ -275,8 +275,19 @@ class SeatBookingManager {
     
     this.selectedSeats.forEach(seatElement => {
       const seatId = this.getSeatId(seatElement);
-      if (socketManager.lockSeat(seatId)) {
+      
+      // Try WebSocket first, fall back to local locking if not connected
+      if (socketManager.isConnected()) {
+        if (socketManager.lockSeat(seatId)) {
+          lockedSeats.push(seatId);
+        }
+      } else {
+        // Local-only mode: just add to myLockedSeats and change UI
+        this.myLockedSeats.add(seatId);
+        seatElement.classList.add("booking");
+        seatElement.title = "Your seat (booking in progress)";
         lockedSeats.push(seatId);
+        console.log(`Seat ${seatId} locked locally (offline mode)`);
       }
     });
 
@@ -417,31 +428,32 @@ proceedBtn.addEventListener("click", () => {
     return;
   }
 
-  // If not connected to server, proceed with local-only booking
-  // The SeatBookingManager singleton will handle concurrency control locally
-  if (!socketManager.isConnected()) {
-    console.log('Proceeding with local booking mode');
-  }
+  // Get the total price before resetting
+  const totalPrice = bookingManager.selectedSeats.length * bookingManager.currentMoviePrice;
 
-  // Lock seats via WebSocket
+  // Lock seats (works in both online and offline mode)
   const lockedSeats = bookingManager.lockSelectedSeats();
   
   if (lockedSeats.length > 0) {
-    // Remove selection UI
+    // Remove selection UI and add booking state
     bookingManager.selectedSeats.forEach((seat) => {
       seat.classList.remove("selected");
     });
 
-    // Start checkout timers for our locked seats
-    lockedSeats.forEach(seatId => {
-      bookingManager.startCheckoutTimer(seatId);
-    });
-
-    alert(`${lockedSeats.length} seat(s) locked! You have 5 minutes to complete the booking. Seats will be automatically released if time expires.`);
+    // Start checkout timers for our locked seats (if connected)
+    if (socketManager.isConnected()) {
+      lockedSeats.forEach(seatId => {
+        bookingManager.startCheckoutTimer(seatId);
+      });
+      alert(`${lockedSeats.length} seat(s) locked! You have 5 minutes to complete the booking. Total: $${totalPrice}`);
+    } else {
+      // Offline mode: Show booking confirmation with total
+      alert(`Booking confirmed for ${lockedSeats.length} seat(s)! Total: $${totalPrice}\n\nIn a real app, you would proceed to payment.`);
+    }
     
-    // Here you would typically redirect to a checkout page
-    // For demo purposes, we'll just show the timer message
-    console.log('Seats locked, checkout timer started');
+    console.log('Seats locked, booking confirmed');
+  } else {
+    alert("Failed to lock seats. Please try again.");
   }
   
   resetSelection();
@@ -509,6 +521,15 @@ const defaultMovie = moviesList[0];
 selectMovieEl.value = defaultMovie.movieName;
 movieNameEl.textContent = defaultMovie.movieName;
 moviePriceEl.textContent = `$ ${defaultMovie.price}`;
+
+// Set today's date dynamically
+const today = new Date();
+const options = { year: 'numeric', month: 'long', day: 'numeric' };
+const dateString = today.toLocaleDateString('en-US', options);
+const dateEl = document.getElementById('currentDate');
+if (dateEl) {
+  dateEl.textContent = dateString;
+}
 
 // Add unlock button for testing
 setTimeout(addUnlockButton, 1000); // 1 second delay to ensure DOM is ready
