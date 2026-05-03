@@ -503,15 +503,18 @@ proceedBtn.addEventListener("click", () => {
       
       console.log('Seats locked:', lockedSeats, 'Failed:', failedSeats);
     } else {
-      // All seats failed to lock
+      // All seats failed to lock - button stays as "Continue"
       if (failedSeats.length > 0) {
         alert(`❌ Sorry! ${failedSeats.length} seat(s) you selected were just taken by another user. Please select different seats.`);
-        // Reset selected seats UI
+        // Reset selected seats UI but keep them selected so user can pick new ones
         bookingManager.selectedSeats.forEach((seat) => {
           seat.classList.remove("selected");
         });
         bookingManager.selectedSeats = [];
         updateDisplay();
+        // Keep button as "Continue" - do NOT change to "Confirm Booking"
+        proceedBtn.textContent = "Continue";
+        proceedBtn.style.backgroundColor = "";
       } else {
         alert("Failed to lock seats. Please try again.");
       }
