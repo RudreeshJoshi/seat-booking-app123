@@ -297,9 +297,17 @@ class SeatBookingManager {
   // Lock seats on proceed
   lockSelectedSeats() {
     const lockedSeats = [];
+    const failedSeats = [];
     
     this.selectedSeats.forEach(seatElement => {
       const seatId = this.getSeatId(seatElement);
+      
+      // Check if seat is still available (not locked by another user)
+      if (!this.isSeatAvailable(seatElement)) {
+        console.log(`Seat ${seatId} is no longer available`);
+        failedSeats.push(seatId);
+        return; // Skip this seat
+      }
       
       // Try WebSocket first, fall back to local locking if not connected
       if (socketManager.isConnected()) {
@@ -318,9 +326,12 @@ class SeatBookingManager {
 
     // Save to pending seats and change stage
     this.pendingSeats = [...lockedSeats];
-    this.bookingStage = 'confirming';
+    if (lockedSeats.length > 0) {
+      this.bookingStage = 'confirming';
+    }
     
-    return lockedSeats;
+    // Return both locked and failed seats
+    return { lockedSeats, failedSeats };
   }
 }
 
@@ -463,10 +474,11 @@ proceedBtn.addEventListener("click", () => {
     const totalPrice = bookingManager.selectedSeats.length * bookingManager.currentMoviePrice;
 
     // Lock seats (works in both online and offline mode)
-    const lockedSeats = bookingManager.lockSelectedSeats();
+    const result = bookingManager.lockSelectedSeats();
+    const { lockedSeats, failedSeats } = result;
     
     if (lockedSeats.length > 0) {
-      // Remove selection UI and add booking state (blue)
+      // Remove selection UI from all selected seats
       bookingManager.selectedSeats.forEach((seat) => {
         seat.classList.remove("selected");
       });
@@ -479,11 +491,30 @@ proceedBtn.addEventListener("click", () => {
       proceedBtn.textContent = "Confirm Booking";
       proceedBtn.style.backgroundColor = "#ff9800"; // Orange color for confirm
       
-      alert(`${lockedSeats.length} seat(s) reserved! Total: $${totalPrice}\n\nClick "Confirm Booking" to complete your reservation.`);
+      // Show success message
+      let message = `${lockedSeats.length} seat(s) reserved! Total: $${lockedSeats.length * bookingManager.currentMoviePrice}\n\nClick "Confirm Booking" to complete your reservation.`;
       
-      console.log('Seats locked, waiting for confirmation');
+      // Show warning if some seats failed
+      if (failedSeats.length > 0) {
+        message += `\n\n⚠️ ${failedSeats.length} seat(s) were taken by another user and not reserved.`;
+      }
+      
+      alert(message);
+      
+      console.log('Seats locked:', lockedSeats, 'Failed:', failedSeats);
     } else {
-      alert("Failed to lock seats. Please try again.");
+      // All seats failed to lock
+      if (failedSeats.length > 0) {
+        alert(`❌ Sorry! ${failedSeats.length} seat(s) you selected were just taken by another user. Please select different seats.`);
+        // Reset selected seats UI
+        bookingManager.selectedSeats.forEach((seat) => {
+          seat.classList.remove("selected");
+        });
+        bookingManager.selectedSeats = [];
+        updateDisplay();
+      } else {
+        alert("Failed to lock seats. Please try again.");
+      }
     }
   }
   // Stage 2: Confirming booking - complete it (turn grey)
